@@ -56,6 +56,7 @@ if not raw_riwayat:
 else:
     df_riwayat = pd.DataFrame(raw_riwayat, columns=["ID Transaksi", "Kode Barang", "Nama Barang", "Jumlah", "Tanggal", "Keterangan/Tujuan"])
     
+    # --- FITUR FILTER ---
     st.write("🔍 **Filter Riwayat:**")
     col_f1, col_f2 = st.columns([2, 1])
     with col_f1:
@@ -63,18 +64,46 @@ else:
     with col_f2:
         filter_date = st.date_input("Filter Berdasarkan Tanggal:", value=None, key="date_keluar")
             
+    # Terapkan filter pada DataFrame
     if search_query:
         df_riwayat = df_riwayat[df_riwayat["Nama Barang"].str.contains(search_query, na=False) | df_riwayat["Kode Barang"].str.contains(search_query, na=False) | df_riwayat["Keterangan/Tujuan"].str.contains(search_query, na=False)]
     if filter_date:
         df_riwayat = df_riwayat[df_riwayat["Tanggal"] == filter_date.strftime("%Y-%m-%d")]
             
+    # --- LOGIKA PAGINATION ---
+    baris_per_halaman = 10
+    total_data = len(df_riwayat)
+    total_halaman = (total_data - 1) // baris_per_halaman + 1 if total_data > 0 else 1
+    
+    # UI untuk memilih halaman
+    col_p1, col_p2, col_p3 = st.columns([1, 2, 1])
+    with col_p1:
+        st.write(f"Total: **{total_data}** riwayat")
+    with col_p2:
+        # Gunakan number_input untuk berpindah halaman
+        halaman_sekarang = st.number_input("Halaman", min_value=1, max_value=total_halaman, step=1, key="halaman_keluar")
+    
+    # Memotong (slicing) data untuk halaman yang dipilih
+    indeks_awal = (halaman_sekarang - 1) * baris_per_halaman
+    indeks_akhir = indeks_awal + baris_per_halaman
+    df_halaman_ini = df_riwayat.iloc[indeks_awal:indeks_akhir]
+    
     st.caption("💡 *Klik ganda untuk mengedit Jumlah/Keterangan. Pilih baris lalu klik ikon Tong Sampah atau tekan Delete untuk menghapus.*")
         
-    edited_df = st.data_editor(df_riwayat, disabled=["ID Transaksi", "Kode Barang", "Nama Barang", "Tanggal"], num_rows="dynamic", hide_index=True, use_container_width=True, key="editor_keluar")
+    # Tampilkan HANYA data pada halaman ini di editor
+    edited_df = st.data_editor(
+        df_halaman_ini, 
+        disabled=["ID Transaksi", "Kode Barang", "Nama Barang", "Tanggal"], 
+        num_rows="dynamic", 
+        hide_index=True, 
+        use_container_width=True, 
+        key=f"editor_keluar_hal_{halaman_sekarang}" # Key dinamis agar tidak error saat ganti halaman
+    )
         
     if st.button("SINKRONISASI PERUBAHAN & PENGHAPUSAN KELUAR", type="primary", use_container_width=True):
         set_id_sekarang = set(edited_df["ID Transaksi"].tolist())
-        id_terlihat = df_riwayat["ID Transaksi"].tolist()
+        # PENTING: Gunakan df_halaman_ini agar sistem tahu id yang terlihat di layar saja
+        id_terlihat = df_halaman_ini["ID Transaksi"].tolist()
         
         # Panggil fungsi aman dari db_utils
         sukses, pesan = sinkronisasi_riwayat_keluar(raw_riwayat, id_terlihat, set_id_sekarang, edited_df)
